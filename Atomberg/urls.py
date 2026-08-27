@@ -15,9 +15,13 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.http import JsonResponse
+from django.urls import include, path, re_path
 
 urlpatterns = [
+    # Render's health check reaches this without the X-Forwarded-Proto header, so
+    # it must not be bounced to https — see SECURE_REDIRECT_EXEMPT in settings.
+    re_path(r'^healthz/?$', lambda request: JsonResponse({'status': 'ok'})),
     path('admin/', admin.site.urls),
     path('api/', include('AtombergApp.urls')),
 ]

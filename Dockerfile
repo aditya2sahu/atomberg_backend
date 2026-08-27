@@ -9,7 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# PORT is injected by Render; locally docker-compose leaves it unset, so default it.
+# Render scans port 10000 unless PORT says otherwise.
+EXPOSE 10000
+
+# PORT is injected by Render; unset locally, so default to the port Render scans.
 # The six factory tables are created by running schema.sql against the database by
 # hand, so AtombergApp's migration is faked here — Django only records that it ran,
 # and never executes any DDL of its own. Django's own tables (auth, sessions,
@@ -18,4 +21,4 @@ CMD python manage.py makemigrations --noinput && \
     python manage.py migrate --fake AtombergApp --noinput && \
     python manage.py migrate --noinput && \
     python manage.py collectstatic --noinput && \
-    gunicorn Atomberg.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3 --timeout 60
+    gunicorn Atomberg.wsgi:application --bind 0.0.0.0:${PORT:-10000} --workers 3 --timeout 60

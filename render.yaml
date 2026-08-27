@@ -10,7 +10,7 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /api/machines/
+    healthCheckPath: /healthz
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -20,6 +20,8 @@ services:
         generateValue: true
       - key: DEBUG
         value: "False"
+      - key: PORT
+        value: "10000"
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
       # Set these to the deployed frontend origin once it exists.
