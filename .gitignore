@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
+/static_root/
+/media/
+
+# Secrets — DB credentials live here. Commit .env.example instead.
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

@@ -1,0 +1,6 @@
+from AtombergApp.views.downtimereason_views import downtime_reason_list
+from AtombergApp.views.machine_views import machine_list, floor_status
+from AtombergApp.views.order_views import get_order_list_and_add, get_and_update_order_detail
+from AtombergApp.views.sku_views import sku_list
+from AtombergApp.views.unitevent_views import analytics_summary, unit_event_list
+from AtombergApp.views.bulk_views import bulk_create

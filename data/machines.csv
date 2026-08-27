@@ -1,0 +1,5 @@
+machine_code,name,target_units_per_hour
+MC-01,Assembly Machine 1,120
+MC-02,Assembly Machine 2,120
+MC-03,Assembly Machine 3,95
+MC-04,Assembly Machine 4,140

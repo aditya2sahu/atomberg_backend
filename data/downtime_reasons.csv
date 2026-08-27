@@ -1,0 +1,11 @@
+reason_code,description,category
+DT-CHG,Changeover / product change,planned
+DT-BRK,Scheduled break,planned
+DT-PMT,Preventive maintenance,planned
+DT-MAT,Material shortage,unplanned
+DT-MTR,Motor test failure,unplanned
+DT-BLD,Blade alignment fault,unplanned
+DT-PCB,PCB module reject,unplanned
+DT-OPR,Operator unavailable,unplanned
+DT-PWR,Power fluctuation,unplanned
+DT-QAL,QA hold,unplanned
