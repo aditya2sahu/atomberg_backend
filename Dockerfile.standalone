@@ -1,0 +1,37 @@
+# Everything in one image: Postgres, schema, data, API.
+#   docker build -f Dockerfile.standalone -t atomberg .
+#   docker run -p 8000:8000 atomberg
+#
+# For demos and reviewers only. Production uses ./Dockerfile with a separate
+# managed database — one process per container.
+FROM postgres:16
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POSTGRES_DB=atomberg \
+    POSTGRES_USER=atomberg \
+    POSTGRES_PASSWORD=atomberg \
+    PGDATA=/var/lib/postgresql/data \
+    DATABASE_URL=postgresql://atomberg:atomberg@127.0.0.1:5432/atomberg \
+    SECRET_KEY=demo-only-not-a-real-secret \
+    DEBUG=True \
+    ALLOWED_HOSTS=* \
+    PORT=8000
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Postgres runs this on first start, so the tables and indexes are built by
+# schema.sql exactly as they are everywhere else.
+COPY schema.sql /docker-entrypoint-initdb.d/01-schema.sql
+
+EXPOSE 8000
+CMD ["/app/docker/standalone-entrypoint.sh"]
