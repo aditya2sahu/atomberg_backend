@@ -95,7 +95,12 @@ pip install -r requirements.txt
 cp .env.example .env          # then edit it with your database details
 createdb atomberg
 
-python manage.py migrate      # executes schema.sql — see Schema below
+# same four steps the container runs on boot — see Migrations below
+python manage.py makemigrations
+python manage.py migrate --fake AtombergApp
+python manage.py migrate
+python manage.py ensure_schema        # creates the tables from schema.sql
+
 python manage.py load_csv data
 python manage.py runserver
 ```
@@ -165,11 +170,16 @@ Data can also be pushed over HTTP; see `POST /api/bulk/{resource}/` below.
 ## Tests
 
 ```bash
-python manage.py test AtombergApp        # 17 tests
+python manage.py makemigrations AtombergApp   # first time on a fresh clone
+python manage.py test AtombergApp             # 17 tests
 ```
 
-The test database is built by running `schema.sql`, so the suite is checking the
-real hand-written DDL and not something the ORM invented. Tests cover the loader,
+Django builds the test database from migrations, and the migrations folder holds
+only `__init__.py` in version control (see *Migrations* below) — so on a fresh
+clone the migration has to be generated once before the suite can run. After that
+`manage.py test` is enough.
+
+Tests cover the loader,
 derived progress, the stored-vs-actual status mismatch, server-side validation,
 the floor board including stopped machines, cursor pagination, downtime maths
 against the snapshot clock, duplicate serials, and bulk insert rollback.
@@ -179,20 +189,8 @@ against the snapshot clock, duplicate serials, and bulk insert rollback.
 ## Schema
 
 `schema.sql` is hand-written — the brief asks for the `CREATE TABLE` statements
-rather than ORM output. Django's migration generates no DDL: it executes that
-file and then records what exists, via `SeparateDatabaseAndState`.
-
-```python
-operations = [
-    migrations.SeparateDatabaseAndState(
-        database_operations=[migrations.RunSQL(SCHEMA_SQL, DROP_SQL)],  # touches the database
-        state_operations=[...],                                        # only tells the ORM
-    )
-]
-```
-
-In production the migration is applied with `--fake` and `schema.sql` is run
-against the database directly, so Django never writes DDL there at all.
+rather than ORM output. Every table, index and constraint in this project comes
+from that one file, in every environment.
 
 Six tables: `machines`, `skus`, `orders`, `downtime_reasons`, `downtime_events`,
 `unit_events`.
@@ -217,6 +215,33 @@ summary table maintained by a trigger, not a hand-updated column.
 positive rates, `ended_at >= started_at`, category and status value lists, and
 `serial_no UNIQUE`. A bad row can't get in through the loader or a `psql`
 session either.
+
+### Migrations
+
+Django never creates a table here. `schema.sql` does, and migrations exist only
+so the ORM knows what shape the database is.
+
+**Nothing in `AtombergApp/migrations/` is committed except `__init__.py`.** The
+migration is generated at startup and immediately faked:
+
+```
+makemigrations              writes the file, so Django can track model state
+migrate --fake AtombergApp  marks it applied without issuing any DDL
+ensure_schema               runs schema.sql if the tables aren't there
+```
+
+`ensure_schema` is a management command that checks for the `machines` table and
+applies `schema.sql` only when it's missing. Since `migrate` is faked, something
+has to actually run the SQL — this is it. It's safe on every boot and prints
+either `Applied schema.sql.` or `Tables already present.`
+
+This also repairs a database whose migration record says "applied" while the
+tables are gone, which is otherwise a silent failure: `migrate` skips the work
+and the first request dies with `relation "machines" does not exist`.
+
+Trade-off worth naming: `schema.sql` doesn't update itself when a model changes.
+Keeping the two in step is manual. With one schema version that's fine; if the
+schema started evolving, a dedicated migration tool would earn its place.
 
 ### Indexes, and what each one is for
 
@@ -462,19 +487,21 @@ doesn't exist here.
 reads it when the service is created **from a Blueprint** — a service created
 through the dashboard needs its environment variables set by hand.
 
-The container runs `migrate --fake AtombergApp`, so Django records the migration
-without executing any DDL. The tables are created by running `schema.sql` against
-the database directly.
+**A deploy needs no manual steps.** The container sets itself up on boot:
 
-**Order matters — do this before the first deploy:**
-
-```bash
-psql "<external database url>" -f schema.sql      # create tables and indexes
-psql "<external database url>" -c "\dt"           # expect six tables
+```
+makemigrations              Django's record of the model state
+migrate --fake AtombergApp  applied, but no DDL
+migrate                     Django's own tables, for real
+ensure_schema               creates the six tables from schema.sql if missing
+load_csv data --if-empty    seeds 80,333 rows, skipped if already loaded
+collectstatic
+gunicorn
 ```
 
-Then deploy, and load the data either with `load_csv` or through
-`POST /api/bulk/{resource}/`.
+A restart is a no-op: `Tables already present.` and `Data already loaded,
+skipping.` Push, and the next deploy builds the schema and loads the data by
+itself.
 
 Environment variables the service needs: `SECRET_KEY`, `DATABASE_URL`,
 `DEBUG=False`, `ALLOWED_HOSTS`, `PORT=10000`, and the two CORS/CSRF origins once
@@ -485,12 +512,10 @@ a frontend exists.
 ## Troubleshooting
 
 **`relation "machines" does not exist`**
-Django's migration record says the migration ran, but the tables aren't there.
-Either it was faked without `schema.sql` being applied, or the tables were
-dropped and the record stayed. Run `schema.sql` against that database. To make
-Django forget without touching data: `python manage.py migrate AtombergApp zero
---fake`, then `python manage.py migrate AtombergApp`. Keep the `--fake` — without
-it that command drops your tables.
+The migration record says applied, but the tables aren't there — `migrate` is
+faked, so it never creates them. Run `python manage.py ensure_schema`, which
+applies `schema.sql` when the tables are missing. A redeploy does this on its
+own; this is only for a database you're poking at by hand.
 
 **Render: "No open ports detected"**
 Gunicorn is on the wrong port. Render scans 10000; make sure `PORT=10000` is set
@@ -507,9 +532,9 @@ defaults, so a missing one exits at startup — check the deploy log for the
 traceback.
 
 **Tests fail with `relation "machines" does not exist`**
-`AtombergApp/migrations/0001_initial.py` is missing. It has to exist and be
-committed: locally it builds the test database from `schema.sql`, and in
-production it's faked.
+No migration file, so Django had nothing to build the test database from. The
+folder is empty in version control by design — run
+`python manage.py makemigrations AtombergApp` once, then run the tests.
 
 ---
 
