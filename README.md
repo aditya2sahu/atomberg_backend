@@ -431,16 +431,57 @@ doesn't exist here.
 
 ## Built for three people
 
-- **Planning team — order book.** The only ones who create and edit, so this is
-  where validation and clear per-field errors matter. Filtering and pagination are
-  server-side, because the order book is 68 rows today and thousands later.
-- **Floor supervisor — wall board.** `GET /floor/status/` returns every machine in
-  one small response, with progress, actual against target rate, a `pace` state,
-  and the stoppage reason in plain words. Nothing to click, because nobody
-  operates that display.
-- **Plant manager — analytics.** A chosen date range returns headline totals,
-  downtime hours by reason sorted by impact, on-time versus late, and per-machine
-  utilisation and availability.
+Three people, three situations, three different shapes of response. The backend
+is what exists today, so each of these is the API surface that screen sits on —
+the constraint drove the payload, not the other way round.
+
+### Planning team — the order book
+
+**Their situation:** at a desk, all day, in one screen. They are the only people
+who *create and change* things, so they are also the only people who will ever
+hit a rejection and need to know exactly which field is wrong.
+
+**So:** `GET /orders/` filters and paginates on the server (`status`, `machine`,
+`priority`, due-date range, text search, `ordering`) — 68 rows today, thousands
+later, and fetching everything to filter in the browser stops holding up long
+before that. `POST` and `PATCH` validate in DRF serializers and return errors
+keyed per field, so a form can put the message next to the input that caused it
+rather than showing a generic toast. `GET /orders/{order_no}/` carries
+`units_done`, `progress_pct` and `projected_completion` so the detail view has
+its progress bar without a second call.
+
+### Floor supervisor — the wall board
+
+**Their situation:** a 1920×1080 screen bolted to a wall. No mouse, no keyboard,
+nobody operating it. It gets glanced at from several metres away, for a second,
+by someone whose hands are full.
+
+**So:** `GET /floor/status/` is one small fixed-shape payload — every machine,
+every refresh, no pagination and no query parameters to get wrong. Each machine
+carries a `pace` of `on_pace` / `behind` / `stopped` / `idle`, precomputed
+server-side, so the display maps it straight to a colour and the meaning carries
+from across the room without anything being read. `downtime_reason` is the plain
+description, never the code `DT-QAL`, because a supervisor should not have to
+decode it. Every machine appears even with no current order, so the board never
+silently loses a card. It is a **separate endpoint from `/orders/` on purpose**:
+the wall polls every 5–10 seconds and wants one tiny response, the order book
+wants browsing and detail — one endpoint serving both would make one of them
+worse.
+
+### Plant manager — analytics
+
+**Their situation:** thinking in weeks, not minutes, usually on a tablet, often
+mid-meeting. They want to leave with a decision, not a table to interpret.
+
+**So:** `GET /analytics/summary/?from=&to=` answers a whole period in one
+request — headline totals first (`total_output`, `total_downtime_hours`,
+`on_time_pct`), so the state of things is legible in three seconds before any
+chart renders. `downtime_by_reason` is returned **sorted biggest-first**, so
+"what is costing us the most" is element zero rather than something the client
+has to work out. `per_machine` gives utilisation and availability side by side.
+Downtime is clipped to the window — a stoppage that started before the range or
+is still open only counts for the part inside it, and never past the snapshot
+time — so two adjacent ranges can be added up without double-counting.
 
 ---
 
